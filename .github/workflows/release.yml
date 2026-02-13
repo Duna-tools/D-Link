@@ -16,17 +16,14 @@ jobs:
         include:
           - os: ubuntu-latest
             arch: x86_64
-            # Target nativo para Linux
           
           - os: windows-latest
             arch: x86_64
-            # Target nativo para Windows
 
           - os: macos-latest
             arch: x86_64
-            # macOS Intel nativo
 
-          - os: macos-14 # Este es Apple Silicon nativo en GitHub
+          - os: macos-14
             arch: aarch64
 
     steps:
@@ -49,9 +46,11 @@ jobs:
         run: brew install libusb pkg-config
 
       # --- COMPILACIÓN ---
-      # No especificamos --target para evitar el bug de libusb1-sys en compilacion cruzada
       - name: Build Release
         run: cargo build --release
+        env:
+          # Intentamos forzar estabilidad en Windows
+          LIBUSB_1.0_NO_PKG_CONFIG: 1
 
       # --- EMPAQUETADO ---
       - name: Pack Linux (.deb & .rpm)
@@ -76,8 +75,8 @@ jobs:
           elif [ "${{ matrix.os }}" == "windows-latest" ]; then
             sha256sum *.zip > checksums.txt
           else
-            cd target/release
-            sha256sum d-link > ../../checksums-${{ matrix.arch }}.txt
+            # macOS usa shasum
+            shasum -a 256 target/release/d-link > checksums-${{ matrix.arch }}.txt
           fi
 
       - name: Upload Artifacts
