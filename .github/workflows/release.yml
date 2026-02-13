@@ -57,11 +57,14 @@ jobs:
       - name: Run Tests
         if: runner.os != 'Windows'
         run: cargo test --locked
+        env:
+          LIBUSB_ALLOW_VENDORED: 0
 
       - name: Build Release
         run: cargo build --release --locked
         env:
           LIBUSB_1.0_NO_PKG_CONFIG: ${{ runner.os == 'Windows' && '1' || '0' }}
+          LIBUSB_ALLOW_VENDORED: ${{ runner.os == 'Windows' && '1' || '0' }}
 
       # --- Packaging ---
       - name: Pack Linux
