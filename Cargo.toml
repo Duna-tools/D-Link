@@ -18,7 +18,7 @@ lazy_static = "1.4"
 hashbrown = "0.14"
 
 [target.'cfg(windows)'.dependencies]
-rusb = { version = "0.6", features = ["vendored"] }
+rusb = { version = "0.6" }
 
 [target.'cfg(not(windows))'.dependencies]
 rusb = { version = "0.6" } # Sin features, forzando uso de pkg-config
