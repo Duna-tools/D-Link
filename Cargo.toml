@@ -12,16 +12,12 @@ crossterm = "0.28.1"
 tui-textarea = "0.6.0"
 
 # USB & System
+rusb = "0.6"
 libnspire = "0.2"
 dirs = "5.0"
 lazy_static = "1.4"
 hashbrown = "0.14"
 
-[target.'cfg(windows)'.dependencies]
-rusb = { version = "0.6", features = ["vendored"] }
-
-[target.'cfg(not(windows))'.dependencies]
-rusb = "0.6"
 
 
 
