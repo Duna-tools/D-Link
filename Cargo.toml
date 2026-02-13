@@ -13,20 +13,10 @@ tui-textarea = "0.6.0"
 
 # USB & System
 libnspire = "0.2"
+rusb = "0.6"
 dirs = "5.0"
 lazy_static = "1.4"
 hashbrown = "0.14"
-
-[target.'cfg(windows)'.dependencies]
-rusb = { version = "0.6" }
-
-[target.'cfg(not(windows))'.dependencies]
-rusb = { version = "0.6" } # Sin features, forzando uso de pkg-config
-
-
-
-
-
 
 # Async & Utilities
 tokio = { version = "1.36", features = ["full"] }
