@@ -1,14 +1,57 @@
-name: Release Build
+name: Build & Release
 
 on:
   push:
+    branches: [ main ]
     tags:
-      - 'v*'
+      - "v*"
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
 jobs:
-  build:
-    name: Build & Pack ${{ matrix.os }} (${{ matrix.arch }})
+  test:
+    name: Test
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ ubuntu-latest, macos-latest, windows-latest ]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Install Dependencies (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libusb-1.0-0-dev pkg-config
+
+      - name: Install Dependencies (macOS)
+        if: matrix.os == 'macos-latest'
+        run: brew install libusb pkg-config
+
+      - name: Run tests
+        run: cargo test --locked
+
+  package:
+    name: Package (${{ matrix.os }} - ${{ matrix.arch }})
+    needs: test
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -16,114 +59,132 @@ jobs:
         include:
           - os: ubuntu-latest
             arch: x86_64
-          
+            target: x86_64-unknown-linux-gnu
+            dist_prefix: d-link-linux-x86_64
           - os: windows-latest
             arch: x86_64
-
+            target: x86_64-pc-windows-msvc
+            dist_prefix: d-link-windows-x86_64
           - os: macos-latest
             arch: x86_64
-
+            target: x86_64-apple-darwin
+            dist_prefix: d-link-macos-intel
           - os: macos-14
             arch: aarch64
+            target: aarch64-apple-darwin
+            dist_prefix: d-link-macos-arm64
 
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install Rust
+      - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
 
-      # --- DEPENDENCIAS ---
-      - name: Install Dependencies (Linux)
+      # --- HARDWARE DEPENDENCIES ---
+      - name: Dependencies (Linux)
         if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt-get update
           sudo apt-get install -y libusb-1.0-0-dev pkg-config ruby ruby-dev rubygems build-essential rpm
           sudo gem install --no-document fpm
 
-      - name: Install Dependencies (macOS)
+      - name: Dependencies (macOS)
         if: contains(matrix.os, 'macos')
         run: brew install libusb pkg-config
 
-      # --- COMPILACIÓN ---
-      - name: Build Release
-        run: cargo build --release
-        env:
-          # Intentamos forzar estabilidad en Windows
-          LIBUSB_1.0_NO_PKG_CONFIG: 1
+      - name: Dependencies (Windows)
+        if: matrix.os == 'windows-latest'
+        run: |
+          vcpkg install libusb:x64-windows-static
+          echo "VCPKG_ROOT=$env:VCPKG_INSTALLATION_ROOT" >> $env:GITHUB_ENV
 
-      # --- EMPAQUETADO ---
-      - name: Pack Linux (.deb & .rpm)
+      # --- VALIDATION ---
+      - name: Verify Version
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: |
+          tag="${{ github.ref_name }}"
+          ver="v$(grep -m1 '^version = ' Cargo.toml | cut -d '"' -f2)"
+          if [[ "${ver}" != "${tag}" ]]; then
+            echo "ERROR: Tag (${tag}) != Cargo.toml version (${ver})"
+            exit 1
+          fi
+
+      # --- BUILD ---
+      - name: Build
+        run: cargo build --release --locked --target ${{ matrix.target }}
+
+      # --- PACKAGING ---
+      - name: Pack Linux
         if: matrix.os == 'ubuntu-latest'
         run: |
+          mkdir -p dist
           mkdir -p staging/usr/bin
-          cp target/release/d-link staging/usr/bin/
+          cp target/${{ matrix.target }}/release/d-link staging/usr/bin/
           fpm -s dir -t deb -n d-link -v ${{ github.ref_name }} -C staging .
           fpm -s dir -t rpm -n d-link -v ${{ github.ref_name }} -C staging .
+          mv *.deb *.rpm dist/
+          cp target/${{ matrix.target }}/release/d-link dist/${{ matrix.dist_prefix }}
 
-      - name: Pack Windows (Zip)
+      - name: Pack Windows
         if: matrix.os == 'windows-latest'
         shell: pwsh
         run: |
-          Compress-Archive -Path target/release/d-link.exe -DestinationPath d-link-windows-x64.zip
+          New-Item -ItemType Directory -Force dist
+          Compress-Archive -Path target/${{ matrix.target }}/release/d-link.exe -DestinationPath dist/${{ matrix.dist_prefix }}.zip
+          # Alternativo portable
+          Copy-Item target/${{ matrix.target }}/release/d-link.exe dist/${{ matrix.dist_prefix }}.exe
 
-      - name: Generate Checksums
-        shell: bash
+      - name: Pack macOS
+        if: contains(matrix.os, 'macos')
         run: |
-          if [ "${{ matrix.os }}" == "ubuntu-latest" ]; then
-            sha256sum *.deb *.rpm > checksums.txt
-          elif [ "${{ matrix.os }}" == "windows-latest" ]; then
-            sha256sum *.zip > checksums.txt
-          else
-            # macOS usa shasum
-            shasum -a 256 target/release/d-link > checksums-${{ matrix.arch }}.txt
-          fi
+          mkdir -p dist
+          cp target/${{ matrix.target }}/release/d-link dist/${{ matrix.dist_prefix }}
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: artifacts-${{ matrix.os }}-${{ matrix.arch }}
-          path: |
-            *.deb
-            *.rpm
-            *.zip
-            checksums*.txt
-            target/release/d-link
-            target/release/d-link.exe
+          name: dist-${{ matrix.dist_prefix }}
+          path: dist/*
 
-  create-release:
-    name: Create Release
-    needs: build
+  release:
+    name: Release
+    needs: package
+    if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/')
     steps:
-      - name: Download all artifacts
+      - name: Download Artifacts
         uses: actions/download-artifact@v4
+        with:
+          pattern: dist-*
+          path: dist
+          merge-multiple: true
 
-      - name: Consolidate Checksums
+      - name: Generate Checksums
+        shell: bash
         run: |
-          cat artifacts-*/checksums*.txt > SHA256SUMS.txt
-          sort -u SHA256SUMS.txt -o SHA256SUMS.txt
+          cd dist
+          sha256sum * > SHA256SUMS
 
       - name: Create Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           files: |
-            **/ *.deb
-            **/ *.rpm
-            **/ *.zip
-            **/ d-link
-            **/ d-link.exe
-            SHA256SUMS.txt
+            dist/*
           body: |
-            ## D-Link Release
+            ## D-Link Release ${{ github.ref_name }}
             
-            ### Integrity Verification
-            Download `SHA256SUMS.txt` to verify your files:
+            ### Installation
+            - **Linux**: Use `.deb` (Debian/Ubuntu) or `.rpm` (Fedora).
+            - **Windows**: Use `.zip` or standalone `.exe`.
+            - **macOS**: Standalone binaries for Intel and Apple Silicon.
+            
+            ### Verification
             ```bash
-            sha256sum -c SHA256SUMS.txt
+            sha256sum -c SHA256SUMS
             ```
-          draft: false
-          prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
