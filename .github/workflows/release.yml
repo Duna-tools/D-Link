@@ -52,16 +52,12 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
             dist_prefix: d-link-linux-x86_64
           - os: windows-latest
-            target: x86_64-pc-windows-msvc
             dist_prefix: d-link-windows-x64
           - os: macos-latest
-            target: x86_64-apple-darwin
             dist_prefix: d-link-macos-intel
           - os: macos-14
-            target: aarch64-apple-darwin
             dist_prefix: d-link-macos-arm64
 
     steps:
@@ -70,8 +66,6 @@ jobs:
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.target }}
 
       # --- Dependencies ---
       - name: Dependencies (Linux)
@@ -87,15 +81,12 @@ jobs:
 
       - name: Dependencies (Windows)
         if: runner.os == 'Windows'
-        run: |
-          vcpkg install libusb:x64-windows-static-md
-          echo "VCPKG_ROOT=$env:VCPKG_INSTALLATION_ROOT" >> $env:GITHUB_ENV
+        run: vcpkg install libusb:x64-windows-static-md
 
       # --- Build ---
-      # Forzamos limpieza y especificamos target para evitar el bug de desempaquetado nativo
+      # COMPILACION NATIVA (Sin --target) para evitar bug de libusb1-sys
       - name: Build
-        run: |
-          cargo build --release --locked --target ${{ matrix.target }}
+        run: cargo build --release --locked
         env:
           LIBUSB_1.0_NO_PKG_CONFIG: ${{ runner.os == 'Windows' && '1' || '0' }}
 
@@ -105,25 +96,25 @@ jobs:
         run: |
           mkdir -p dist
           mkdir -p staging/usr/bin
-          cp target/${{ matrix.target }}/release/d-link staging/usr/bin/
+          cp target/release/d-link staging/usr/bin/
           fpm -s dir -t deb -n d-link -v ${{ github.ref_name }} -C staging .
           fpm -s dir -t rpm -n d-link -v ${{ github.ref_name }} -C staging .
           mv *.deb *.rpm dist/
-          cp target/${{ matrix.target }}/release/d-link dist/${{ matrix.dist_prefix }}
+          cp target/release/d-link dist/${{ matrix.dist_prefix }}
 
       - name: Pack Windows
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force dist
-          Compress-Archive -Path target\${{ matrix.target }}\release\d-link.exe -DestinationPath dist\${{ matrix.dist_prefix }}.zip
-          Copy-Item target\${{ matrix.target }}\release\d-link.exe dist\${{ matrix.dist_prefix }}.exe
+          Compress-Archive -Path target\release\d-link.exe -DestinationPath dist\${{ matrix.dist_prefix }}.zip
+          Copy-Item target\release\d-link.exe dist\${{ matrix.dist_prefix }}.exe
 
       - name: Pack macOS
         if: runner.os == 'macOS'
         run: |
           mkdir -p dist
-          cp target/${{ matrix.target }}/release/d-link dist/${{ matrix.dist_prefix }}
+          cp target/release/d-link dist/${{ matrix.dist_prefix }}
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
