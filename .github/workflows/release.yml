@@ -53,8 +53,9 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          vcpkg install libusb:x64-windows-static-md
+          vcpkg install libusb:x64-windows
           echo "VCPKG_ROOT=$env:VCPKG_INSTALLATION_ROOT" >> $env:GITHUB_ENV
+          echo "VCPKGRS_DYNAMIC=1" >> $env:GITHUB_ENV
 
       # --- Test & Build Atómico ---
       - name: Run Tests
