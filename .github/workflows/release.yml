@@ -1,4 +1,4 @@
-name: Release Build Pro
+name: Release Build
 
 on:
   push:
@@ -23,7 +23,6 @@ jobs:
           - os: windows-latest
             arch: x86_64
             target: x86_64-pc-windows-msvc
-            pack_msi: true
 
           - os: macos-latest
             arch: x86_64
@@ -42,51 +41,36 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
-      # --- DEPENDENCIAS ---
-      - name: Install Dependencies (Linux)
+      # Herramientas de empaquetado Linux (fpm sigue siendo necesario para .deb/.rpm)
+      - name: Install Packaging Tools (Linux)
         if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libusb-1.0-0-dev pkg-config ruby ruby-dev rubygems build-essential rpm
+          sudo apt-get install -y ruby ruby-dev rubygems build-essential rpm
           sudo gem install --no-document fpm
 
-      - name: Install Dependencies (macOS)
-        if: matrix.os == 'macos-latest'
-        run: brew install libusb pkg-config
-
-      - name: Setup vcpkg (Windows)
-        if: matrix.os == 'windows-latest'
-        run: |
-          vcpkg install libusb:x64-windows-static
-          echo "LIBUSB_LIB_DIR=C:/vcpkg/installed/x64-windows-static/lib" >> $GITHUB_ENV
-          echo "LIBUSB_INCLUDE_DIR=C:/vcpkg/installed/x64-windows-static/include" >> $GITHUB_ENV
-
-      # --- COMPILACIÓN ---
+      # Compilacion (libusb se compila ahora automaticamente gracias a 'vendored')
       - name: Build Release
         run: cargo build --release --target ${{ matrix.target }}
 
-      # --- EMPAQUETADO LINUX (.deb / .rpm) ---
+      # Empaquetado Linux
       - name: Pack Linux (.deb & .rpm)
         if: matrix.os == 'ubuntu-latest'
         run: |
           mkdir -p staging/usr/bin
           cp target/${{ matrix.target }}/release/d-link staging/usr/bin/
-          # Generar DEB
           fpm -s dir -t deb -n d-link -v ${{ github.ref_name }} -C staging .
-          # Generar RPM
           fpm -s dir -t rpm -n d-link -v ${{ github.ref_name }} -C staging .
 
-      # --- EMPAQUETADO WINDOWS (.msi) ---
-      - name: Pack Windows (.msi)
+      # Empaquetado Windows
+      - name: Pack Windows (Zip)
         if: matrix.os == 'windows-latest'
         shell: pwsh
         run: |
-          # Usamos un script simple para crear un zip o instalador basico
-          # Para MSI real se suele usar WiX Toolset, aqui prepararemos el binario firmado
           Compress-Archive -Path target/${{ matrix.target }}/release/d-link.exe -DestinationPath d-link-windows-x64.zip
 
-      # --- GENERAR CHECKSUMS ---
-      - name: Generate SHA-256
+      # Generar SHA-256
+      - name: Generate Checksums
         shell: bash
         run: |
           if [ "${{ matrix.os }}" == "ubuntu-latest" ]; then
@@ -110,7 +94,7 @@ jobs:
             target/${{ matrix.target }}/release/d-link
 
   create-release:
-    name: Create Pro Release
+    name: Create Release
     needs: build
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
@@ -121,7 +105,6 @@ jobs:
       - name: Consolidate Checksums
         run: |
           cat artifacts-*/checksums*.txt > SHA256SUMS.txt
-          # Limpiar duplicados si los hay
           sort -u SHA256SUMS.txt -o SHA256SUMS.txt
 
       - name: Create Release
@@ -134,7 +117,7 @@ jobs:
             **/ d-link
             SHA256SUMS.txt
           body: |
-            ## D-Link TUI Pro Release
+            ## D-Link Release
             
             ### Integrity Verification
             Download `SHA256SUMS.txt` to verify your files:

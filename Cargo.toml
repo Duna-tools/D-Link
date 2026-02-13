@@ -12,7 +12,7 @@ crossterm = "0.28.1"
 tui-textarea = "0.6.0"
 
 # USB & System
-rusb = "0.6" # Mantenemos 0.6 por compatibilidad con libnspire
+rusb = { version = "0.6", features = ["vendored"] } # Compilacion estatica de libusb integrada
 libnspire = "0.2"
 dirs = "5.0"
 lazy_static = "1.4"

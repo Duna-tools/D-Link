@@ -419,7 +419,7 @@ fn draw_help_popup(f: &mut Frame) {
     f.render_widget(Clear, area);
 
     let help_text = vec![
-        " [ D-LINK COMMAND CENTER PRO ] ",
+        " [ D-LINK COMMAND CENTER ] ",
         "--------------------------------------",
         "",
         " [ NAVIGATION ] ",
