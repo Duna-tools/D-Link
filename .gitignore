@@ -1,0 +1,26 @@
+# Rust / Compilacion
+/target
+Cargo.lock
+
+# Configuracion local
+.env
+config.toml
+
+# Binarios y Paquetes de Distribucion
+*.exe
+*.msi
+*.deb
+*.rpm
+*.zip
+*.tar.gz
+SHA256SUMS.txt
+
+# Artefactos del Sistema Operativo
+.DS_Store
+Thumbs.db
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
