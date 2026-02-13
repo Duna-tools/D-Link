@@ -54,8 +54,12 @@ jobs:
         shell: pwsh
         run: |
           vcpkg install libusb:x64-windows
-          echo "VCPKG_ROOT=$env:VCPKG_INSTALLATION_ROOT" >> $env:GITHUB_ENV
+          $vcpkgRoot = if ($env:VCPKG_INSTALLATION_ROOT) { $env:VCPKG_INSTALLATION_ROOT } else { "C:\\vcpkg" }
+          echo "VCPKG_ROOT=$vcpkgRoot" >> $env:GITHUB_ENV
           echo "VCPKGRS_DYNAMIC=1" >> $env:GITHUB_ENV
+          $header = Get-ChildItem -Path (Join-Path $vcpkgRoot "installed/x64-windows/include") -Recurse -Filter libusb.h | Select-Object -First 1
+          if (-not $header) { throw "libusb.h not found under $vcpkgRoot\\installed\\x64-windows\\include" }
+          echo "DEP_USB_1.0_INCLUDE=$($header.Directory.FullName)" >> $env:GITHUB_ENV
 
       # --- Test & Build Atómico ---
       - name: Run Tests
