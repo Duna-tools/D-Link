@@ -14,38 +14,8 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  test:
-    name: Test (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ ubuntu-latest, macos-latest ]
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Install Dependencies (Linux)
-        if: matrix.os == 'ubuntu-latest'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libusb-1.0-0-dev pkg-config
-
-      - name: Install Dependencies (macOS)
-        if: matrix.os == 'macos-latest'
-        run: brew install libusb pkg-config
-
-      - name: Run tests
-        run: cargo test --locked
-
-  package:
-    name: Package (${{ matrix.os }})
-    needs: test
-    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+  build-and-release:
+    name: Build & Pack (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -83,9 +53,12 @@ jobs:
         if: runner.os == 'Windows'
         run: vcpkg install libusb:x64-windows-static-md
 
-      # --- Build ---
-      # COMPILACION NATIVA (Sin --target) para evitar bug de libusb1-sys
-      - name: Build
+      # --- Test & Build Atómico ---
+      - name: Run Tests
+        if: runner.os != 'Windows'
+        run: cargo test --locked
+
+      - name: Build Release
         run: cargo build --release --locked
         env:
           LIBUSB_1.0_NO_PKG_CONFIG: ${{ runner.os == 'Windows' && '1' || '0' }}
@@ -123,8 +96,8 @@ jobs:
           path: dist/*
 
   release:
-    name: Create Release
-    needs: package
+    name: Create GitHub Release
+    needs: build-and-release
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:
