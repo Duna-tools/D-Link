@@ -16,21 +16,18 @@ jobs:
         include:
           - os: ubuntu-latest
             arch: x86_64
-            target: x86_64-unknown-linux-gnu
-            pack_deb: true
-            pack_rpm: true
+            # Target nativo para Linux
           
           - os: windows-latest
             arch: x86_64
-            target: x86_64-pc-windows-msvc
+            # Target nativo para Windows
 
           - os: macos-latest
             arch: x86_64
-            target: x86_64-apple-darwin
+            # macOS Intel nativo
 
-          - os: macos-latest
+          - os: macos-14 # Este es Apple Silicon nativo en GitHub
             arch: aarch64
-            target: aarch64-apple-darwin
 
     steps:
       - name: Checkout code
@@ -38,10 +35,8 @@ jobs:
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.target }}
 
-      # --- DEPENDENCIAS DE SISTEMA (Solo Unix) ---
+      # --- DEPENDENCIAS ---
       - name: Install Dependencies (Linux)
         if: matrix.os == 'ubuntu-latest'
         run: |
@@ -50,19 +45,20 @@ jobs:
           sudo gem install --no-document fpm
 
       - name: Install Dependencies (macOS)
-        if: matrix.os == 'macos-latest'
+        if: contains(matrix.os, 'macos')
         run: brew install libusb pkg-config
 
       # --- COMPILACIÓN ---
+      # No especificamos --target para evitar el bug de libusb1-sys en compilacion cruzada
       - name: Build Release
-        run: cargo build --release --target ${{ matrix.target }}
+        run: cargo build --release
 
       # --- EMPAQUETADO ---
       - name: Pack Linux (.deb & .rpm)
         if: matrix.os == 'ubuntu-latest'
         run: |
           mkdir -p staging/usr/bin
-          cp target/${{ matrix.target }}/release/d-link staging/usr/bin/
+          cp target/release/d-link staging/usr/bin/
           fpm -s dir -t deb -n d-link -v ${{ github.ref_name }} -C staging .
           fpm -s dir -t rpm -n d-link -v ${{ github.ref_name }} -C staging .
 
@@ -70,7 +66,7 @@ jobs:
         if: matrix.os == 'windows-latest'
         shell: pwsh
         run: |
-          Compress-Archive -Path target/${{ matrix.target }}/release/d-link.exe -DestinationPath d-link-windows-x64.zip
+          Compress-Archive -Path target/release/d-link.exe -DestinationPath d-link-windows-x64.zip
 
       - name: Generate Checksums
         shell: bash
@@ -80,8 +76,8 @@ jobs:
           elif [ "${{ matrix.os }}" == "windows-latest" ]; then
             sha256sum *.zip > checksums.txt
           else
-            cd target/${{ matrix.target }}/release
-            sha256sum d-link > ../../../checksums-${{ matrix.arch }}.txt
+            cd target/release
+            sha256sum d-link > ../../checksums-${{ matrix.arch }}.txt
           fi
 
       - name: Upload Artifacts
@@ -93,7 +89,8 @@ jobs:
             *.rpm
             *.zip
             checksums*.txt
-            target/${{ matrix.target }}/release/d-link
+            target/release/d-link
+            target/release/d-link.exe
 
   create-release:
     name: Create Release
@@ -117,6 +114,7 @@ jobs:
             **/ *.rpm
             **/ *.zip
             **/ d-link
+            **/ d-link.exe
             SHA256SUMS.txt
           body: |
             ## D-Link Release
