@@ -20,8 +20,6 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Ejecutamos tests en Linux y macOS para validar logica. 
-        # Windows tiene bugs de IO en el runner con libusb-sys.
         os: [ ubuntu-latest, macos-latest ]
 
     steps:
@@ -84,14 +82,15 @@ jobs:
       - name: Dependencies (Windows)
         if: runner.os == 'Windows'
         run: |
-          vcpkg install libusb:x64-windows-static
+          vcpkg install libusb:x64-windows-static-md
           echo "VCPKG_ROOT=$env:VCPKG_INSTALLATION_ROOT" >> $env:GITHUB_ENV
-          echo "LIBUSB_LIB_DIR=$env:VCPKG_INSTALLATION_ROOT\installed\x64-windows-static\lib" >> $env:GITHUB_ENV
-          echo "LIBUSB_INCLUDE_DIR=$env:VCPKG_INSTALLATION_ROOT\installed\x64-windows-static\include" >> $env:GITHUB_ENV
 
       # --- Build ---
       - name: Build
         run: cargo build --release --locked
+        env:
+          # Forzar a libusb1-sys a encontrar la libreria instalada por vcpkg
+          LIBUSB_1.0_NO_PKG_CONFIG: 1
 
       # --- Packaging ---
       - name: Pack Linux
@@ -110,8 +109,8 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force dist
-          Compress-Archive -Path target/release/d-link.exe -DestinationPath dist/${{ matrix.dist_prefix }}.zip
-          Copy-Item target/release/d-link.exe dist/${{ matrix.dist_prefix }}.exe
+          Compress-Archive -Path target\release\d-link.exe -DestinationPath dist\${{ matrix.dist_prefix }}.zip
+          Copy-Item target\release\d-link.exe dist\${{ matrix.dist_prefix }}.exe
 
       - name: Pack macOS
         if: runner.os == 'macOS'
