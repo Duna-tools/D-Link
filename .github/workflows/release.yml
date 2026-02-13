@@ -51,7 +51,10 @@ jobs:
 
       - name: Dependencies (Windows)
         if: runner.os == 'Windows'
-        run: vcpkg install libusb:x64-windows-static-md
+        shell: pwsh
+        run: |
+          vcpkg install libusb:x64-windows-static-md
+          echo "VCPKG_ROOT=$env:VCPKG_INSTALLATION_ROOT" >> $env:GITHUB_ENV
 
       # --- Test & Build Atómico ---
       - name: Run Tests
@@ -63,7 +66,6 @@ jobs:
       - name: Build Release
         run: cargo build --release --locked
         env:
-          LIBUSB_1.0_NO_PKG_CONFIG: ${{ runner.os == 'Windows' && '1' || '0' }}
           LIBUSB_ALLOW_VENDORED: ${{ runner.os == 'Windows' && '1' || '0' }}
 
       # --- Packaging ---
@@ -125,12 +127,12 @@ jobs:
             dist/*
           body: |
             ## D-Link Release ${{ github.ref_name }}
-            
+
             ### Assets produced by CI:
             - **Linux**: Debian/Ubuntu (.deb) and Fedora/RPM (.rpm).
             - **Windows**: Portable (.zip) and standalone .exe.
             - **macOS**: Native binaries for Intel and Apple Silicon (ARM64).
-            
+
             ### Integrity Verification
             ```bash
             sha256sum -c SHA256SUMS
