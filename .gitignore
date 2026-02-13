@@ -1,6 +1,5 @@
 # Rust / Compilacion
 /target
-Cargo.lock
 
 # Configuracion local
 .env
